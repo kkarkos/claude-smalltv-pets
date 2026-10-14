@@ -1,0 +1,52 @@
+# Builds the firmware on every push and pull request. A v* tag also publishes
+# a GitHub release with the firmware attached.
+name: firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ hashFiles('firmware/platformio.ini') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio==6.2.0
+
+      - name: Build
+        working-directory: firmware
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then VERSION="${GITHUB_REF_NAME#v}"; else VERSION="0.0.0-${GITHUB_SHA::7}"; fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          PLATFORMIO_BUILD_FLAGS="-D FW_VERSION=\\\"$VERSION\\\"" pio run
+          cp .pio/build/smalltv_pro/firmware.bin "../claude-smalltv-pets-$VERSION.bin"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ env.VERSION }}
+          path: claude-smalltv-pets-${{ env.VERSION }}.bin
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          awk -v v="## ${VERSION} " 'index($0, v) == 1 {on=1; next} /^## / {on=0} on' CHANGELOG.md > notes.md
+          gh release create "$GITHUB_REF_NAME" "claude-smalltv-pets-$VERSION.bin" \
+            --title "claude-smalltv-pets $VERSION" --notes-file notes.md

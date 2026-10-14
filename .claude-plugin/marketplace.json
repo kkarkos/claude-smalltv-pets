@@ -1,0 +1,15 @@
+{
+  "name": "claude-smalltv-pets",
+  "description": "Claude Code desk pet for the GeekMagic SmallTV Pro",
+  "owner": {
+    "name": "Konrad",
+    "url": "https://github.com/kkarkos"
+  },
+  "plugins": [
+    {
+      "name": "smalltv-pet",
+      "source": "./plugin",
+      "description": "A desk pet for Claude Code on a GeekMagic SmallTV Pro: shows what each session is doing and answers permission prompts with the button on top."
+    }
+  ]
+}

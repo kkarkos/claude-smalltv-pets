@@ -1,0 +1,35 @@
+{
+  "name": "smalltv-pet",
+  "version": "0.1.0",
+  "description": "A desk pet for Claude Code on a GeekMagic SmallTV Pro: shows what each session is doing and answers permission prompts with the button on top.",
+  "author": {
+    "name": "Konrad",
+    "url": "https://github.com/kkarkos"
+  },
+  "userConfig": {
+    "deviceUrl": {
+      "type": "string",
+      "title": "Pet address",
+      "description": "Where the pet's firmware answers, e.g. http://claude-pet.local or http://192.168.1.50",
+      "default": "http://claude-pet.local"
+    },
+    "approvalSeconds": {
+      "type": "number",
+      "title": "Seconds to answer on the pet",
+      "description": "How long a permission prompt waits for the pet's button before the terminal dialog shows. 0 turns desk approvals off.",
+      "default": 20
+    }
+  },
+  "homepage": "https://github.com/kkarkos/claude-smalltv-pets",
+  "repository": "https://github.com/kkarkos/claude-smalltv-pets",
+  "license": "MIT",
+  "keywords": [
+    "desk pet",
+    "smalltv",
+    "geekmagic",
+    "esp32",
+    "hardware",
+    "approvals",
+    "status"
+  ]
+}
