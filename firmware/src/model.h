@@ -7,7 +7,7 @@
 
 enum class PetState : uint8_t { Idle, Thinking, Working, Waiting, Done, Error, Sleep };
 
-constexpr int MAX_SESSIONS = 6;
+constexpr int MAX_SESSIONS = 12;
 constexpr int MAX_HELPERS  = 5;
 constexpr int BODY_COUNT   = 4;
 

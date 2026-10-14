@@ -65,6 +65,8 @@ void begin(uint32_t waitMs) {
   WiFi.persistent(false);
   WiFi.setHostname(HOSTNAME);
   WiFi.setAutoReconnect(true);
+  // Modem power saving delays packets by 50-200 ms; the pet runs on USB power.
+  WiFi.setSleep(false);
 
   if (!g_ssid.isEmpty()) {
     WiFi.mode(WIFI_STA);

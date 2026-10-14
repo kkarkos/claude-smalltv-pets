@@ -124,9 +124,11 @@ Session* findOrAdd(const char* sid) {
   for (auto& s : g_sessions)
     if (!s.isUsed) { slot = &s; break; }
   if (!slot) {  // full: evict the stalest
+    // Full: drop the session that has done nothing for longest. (Not the
+    // oldest heartbeat: every session heartbeats, so that is a random pick.)
     slot = &g_sessions[0];
     for (auto& s : g_sessions)
-      if (s.updatedMs < slot->updatedMs) slot = &s;
+      if (s.activityMs < slot->activityMs) slot = &s;
   }
   memset(slot, 0, sizeof(*slot));
   slot->isUsed = true;

@@ -16,6 +16,7 @@ constexpr int BARS_Y = 202;
 // The case's bezel hides the panel's outer rows: keep content off the bottom edge.
 constexpr int SAFE_BOTTOM = 228;
 constexpr uint32_t SLEEP_AFTER_MS = 120 * 1000;
+constexpr int MAX_DOTS = 6;   // more sessions than this: "3/9" instead of dots
 
 Arduino_Canvas* g_stage = nullptr;
 Arduino_Canvas* g_labelCanvas = nullptr;
@@ -59,13 +60,33 @@ void drawHeader(const char* name, uint16_t color, const char* model, const char*
   G()->print(effort);
 
   int x = right - max(modelW, effortW) - 8;
-  for (int i = v.count - 1; i >= 0; i--, x -= 9) {
-    bool needsYou = v.entries[i].isAsking || v.entries[i].state == PetState::Waiting;
-    if (i == v.index) G()->fillCircle(x, 12, 3, needsYou ? C_WARN : C_ACCENT);
-    else if (needsYou) G()->fillCircle(x, 12, 3, C_WARN);
-    else G()->drawCircle(x, 12, 2, C_DIM);
+  int dotsLeft;
+  if (v.count <= MAX_DOTS) {
+    for (int i = v.count - 1; i >= 0; i--, x -= 9) {
+      bool needsYou = v.entries[i].isAsking || v.entries[i].state == PetState::Waiting;
+      if (i == v.index) G()->fillCircle(x, 12, 3, needsYou ? C_WARN : C_ACCENT);
+      else if (needsYou) G()->fillCircle(x, 12, 3, C_WARN);
+      else G()->drawCircle(x, 12, 2, C_DIM);
+    }
+    dotsLeft = v.count > 0 ? x + 6 : right - max(modelW, effortW);
+  } else {
+    // Too many for dots: "3/9", and one yellow dot when another needs you.
+    bool otherNeedsYou = false;
+    for (int i = 0; i < v.count; i++)
+      if (i != v.index && (v.entries[i].isAsking || v.entries[i].state == PetState::Waiting)) otherNeedsYou = true;
+    char pos[8];
+    snprintf(pos, sizeof(pos), "%d/%d", v.index + 1, v.count);
+    int w = display::textWidth(pos, 1);
+    G()->setTextColor(C_TEXT, C_PANEL);
+    G()->setCursor(x - w + 3, 9);
+    G()->print(pos);
+    x -= w + 2;
+    if (otherNeedsYou) {
+      G()->fillCircle(x - 2, 12, 3, C_WARN);
+      x -= 9;
+    }
+    dotsLeft = x + 2;
   }
-  int dotsLeft = v.count > 0 ? x + 6 : right - max(modelW, effortW);
   if (v.isPinned && v.count > 0) {
     // A pushpin: head and needle.
     G()->fillCircle(x - 1, 9, 3, C_ACCENT);
@@ -272,7 +293,7 @@ void drawApprovalFooter(const Approval& a, uint32_t now) {
 // Row 0 is "Auto" (follow activity); rows 1.. are the sessions in the order
 // they started.
 constexpr uint32_t PICK_AFTER_MS = 2000;
-constexpr int PICK_Y = 30, PICK_ROW = 26;
+constexpr int PICK_Y = 30, PICK_ROW = 26, PICK_ROWS = 7;   // rows on screen at once
 
 struct Picker {
   bool     isOpen;
@@ -288,16 +309,26 @@ const char* shortState(PetState s, bool isAsking) {
 }
 
 void drawPickerRows(const View& v) {
+  // A window of PICK_ROWS rows that keeps the highlight in view.
+  int total = v.count + 1;
+  int first = constrain(g_picker.highlight - PICK_ROWS / 2, 0, max(0, total - PICK_ROWS));
+  int last = min(total, first + PICK_ROWS);
   char key[96];
-  int n = snprintf(key, sizeof(key), "%d|%d|", g_picker.highlight, v.count);
+  int n = snprintf(key, sizeof(key), "%d|%d|%d|", g_picker.highlight, v.count, first);
   for (int i = 0; i < v.count && n < (int)sizeof(key) - 4; i++)
     n += snprintf(key + n, sizeof(key) - n, "%c%c", 'a' + (int)v.entries[i].state, v.entries[i].isAsking ? '!' : '.');
   if (!strcmp(g_picker.drawnKey, key)) return;
   strncpy(g_picker.drawnKey, key, sizeof(g_picker.drawnKey) - 1);
 
-  G()->fillRect(0, PICK_Y - 4, TFT_W, PICK_Y + 7 * PICK_ROW - (PICK_Y - 4), C_BG);
-  for (int row = 0; row <= v.count; row++) {
-    int y = PICK_Y + row * PICK_ROW;
+  G()->fillRect(0, PICK_Y - 4, TFT_W, PICK_ROWS * PICK_ROW + 4, C_BG);
+  // Small arrows at the right edge when rows are out of view.
+  if (first > 0) G()->fillTriangle(TFT_W - 6, PICK_Y - 3, TFT_W - 10, PICK_Y + 1, TFT_W - 2, PICK_Y + 1, C_DIM);
+  if (last < total) {
+    int yb = PICK_Y + PICK_ROWS * PICK_ROW - 2;
+    G()->fillTriangle(TFT_W - 6, yb + 1, TFT_W - 10, yb - 3, TFT_W - 2, yb - 3, C_DIM);
+  }
+  for (int row = first; row < last; row++) {
+    int y = PICK_Y + (row - first) * PICK_ROW;
     bool isOn = row == g_picker.highlight;
     uint16_t bg = isOn ? C_PANEL : C_BG;
     if (isOn) {
@@ -329,7 +360,7 @@ void drawPickerRows(const View& v) {
     G()->print(name);
     G()->setTextSize(1);
     G()->setTextColor(stateColor, bg);
-    G()->setCursor(TFT_W - 12 - display::textWidth(state, 1), y + 9);
+    G()->setCursor(TFT_W - 16 - display::textWidth(state, 1), y + 9);
     G()->print(state);
   }
 }
