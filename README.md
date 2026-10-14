@@ -4,7 +4,10 @@ A desk pet for [Claude Code](https://code.claude.com) on a **GeekMagic SmallTV P
 
 Every Claude Code session gets a pixel critter with its own colour and body. It shows what the session is doing (thinking, working, waiting for you, done, error, asleep) with a running narration ("Editing register.ts", "$ bun test"). Subagents join as named helper pets beside a crowned lead. The header shows the model and effort; bars show context fill and your 5-hour and 7-day usage. And when Claude asks for permission, you can answer with the button.
 
-![The pet's moods and body types](docs/moods.png)
+<p align="center">
+  <a href="docs/demo.mp4"><img src="docs/demo.jpg" width="360" alt="The pet on a SmallTV Pro: a crowned lead and three Explore helpers working"></a><br>
+  <a href="docs/demo.mp4"><b>▶ Watch the 28-second demo</b></a>
+</p>
 
 ## What you need
 

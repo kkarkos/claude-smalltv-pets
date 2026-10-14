@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.1 (2026-10-14)
+
+- Fix: text with characters the pixel font cannot draw ("Thinking…", curly quotes, umlauts in project names) showed as garbage. The pet now turns it into plain ASCII: "..." for "…", "ae" for "ä", "?" for scripts it has no letters for.
+- README: a demo video of the pet on a real device.
+
 ## 0.1.0 (2026-10-14)
 
 First release.

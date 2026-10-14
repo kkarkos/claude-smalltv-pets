@@ -34,6 +34,67 @@ void copyStr(char* dst, size_t cap, const char* src) {
   dst[cap - 1] = '\0';
 }
 
+// What the pixel font can draw for one code point beyond ASCII: the plugin's
+// "…", Claude's curly quotes and dashes, German and other Latin letters.
+const char* asciiFor(uint32_t cp) {
+  switch (cp) {
+    case 0x2026: return "...";
+    case 0x2013: case 0x2014: case 0x2212: return "-";
+    case 0x2018: case 0x2019: case 0x201A: case 0x00B4: return "'";
+    case 0x201C: case 0x201D: case 0x201E: case 0x00AB: case 0x00BB: return "\"";
+    case 0x00A0: case 0x2009: case 0x202F: return " ";
+    case 0x2022: case 0x00B7: return "*";
+    case 0x2192: return "->";
+    case 0x2190: return "<-";
+    case 0x00E4: return "ae"; case 0x00F6: return "oe"; case 0x00FC: return "ue";
+    case 0x00C4: return "Ae"; case 0x00D6: return "Oe"; case 0x00DC: return "Ue";
+    case 0x00DF: return "ss";
+    case 0x00E7: return "c";  case 0x00F1: return "n";
+  }
+  if (cp >= 0x00E0 && cp <= 0x00E5) return "a";
+  if (cp >= 0x00E8 && cp <= 0x00EB) return "e";
+  if (cp >= 0x00EC && cp <= 0x00EF) return "i";
+  if (cp >= 0x00F2 && cp <= 0x00F6) return "o";
+  if (cp >= 0x00F9 && cp <= 0x00FC) return "u";
+  if (cp >= 0x00C0 && cp <= 0x00C5) return "A";
+  if (cp >= 0x00C8 && cp <= 0x00CB) return "E";
+  return "?";
+}
+
+// Copies text the plugin sent into what the pixel font can draw: UTF-8 turned
+// into ASCII (see asciiFor), control characters into spaces.
+void copyText(char* dst, size_t cap, const char* src) {
+  if (!src) src = "";
+  size_t n = 0;
+  auto put = [&](const char* s) {
+    size_t len = strlen(s);
+    if (n + len >= cap) return false;
+    memcpy(dst + n, s, len);
+    n += len;
+    return true;
+  };
+  const uint8_t* p = (const uint8_t*)src;
+  while (*p) {
+    uint32_t cp;
+    int extra;
+    if (*p < 0x80) { cp = *p; extra = 0; }
+    else if ((*p & 0xE0) == 0xC0) { cp = *p & 0x1F; extra = 1; }
+    else if ((*p & 0xF0) == 0xE0) { cp = *p & 0x0F; extra = 2; }
+    else if ((*p & 0xF8) == 0xF0) { cp = *p & 0x07; extra = 3; }
+    else { p++; continue; }   // a stray continuation byte
+    p++;
+    bool isWhole = true;
+    for (int i = 0; i < extra; i++, p++) {
+      if ((*p & 0xC0) != 0x80) { isWhole = false; break; }
+      cp = (cp << 6) | (*p & 0x3F);
+    }
+    char one[2] = {(char)cp, 0};
+    const char* out = !isWhole ? "?" : cp < 0x20 || cp == 0x7F ? " " : cp < 0x80 ? one : asciiFor(cp);
+    if (!put(out)) break;
+  }
+  dst[n] = '\0';
+}
+
 PetState parseState(const char* s) {
   if (!s) return PetState::Idle;
   if (!strcmp(s, "thinking")) return PetState::Thinking;
@@ -173,12 +234,20 @@ bool upsertSession(JsonVariantConst b, String& err) {
   if (!sid || !sid[0]) { err = "sid is required"; return false; }
   Lock l;
   Session* s = findOrAdd(sid);
-  if (b["name"].is<const char*>())  setBase(s, b["name"]);
+  if (b["name"].is<const char*>()) {
+    char base[24];
+    copyText(base, sizeof(base), b["name"]);
+    setBase(s, base);
+  }
   uint32_t now = millis();
   bool isActive = false;   // a heartbeat repeats what the pet knows; only change counts
-  if (b["label"].is<const char*>() && strncmp(s->label, b["label"], sizeof(s->label) - 1)) {
-    copyStr(s->label, sizeof(s->label), b["label"]);
-    isActive = true;
+  if (b["label"].is<const char*>()) {
+    char label[sizeof(s->label)];
+    copyText(label, sizeof(label), b["label"]);
+    if (strcmp(s->label, label)) {
+      strcpy(s->label, label);
+      isActive = true;
+    }
   }
   if (b["color"].is<int>()) s->color = (uint8_t)(b["color"].as<int>() & 7);
   if (b["body"].is<int>())  s->body = (uint8_t)(b["body"].as<int>() % BODY_COUNT);
@@ -189,8 +258,8 @@ bool upsertSession(JsonVariantConst b, String& err) {
   if (!b["ctx"].isUnbound())  s->ctx  = percentOrUnknown(b["ctx"]);
   if (!b["five"].isUnbound()) s->five = percentOrUnknown(b["five"]);
   if (!b["week"].isUnbound()) s->week = percentOrUnknown(b["week"]);
-  if (b["model"].is<const char*>())  copyStr(s->model, sizeof(s->model), b["model"]);
-  if (b["effort"].is<const char*>()) copyStr(s->effort, sizeof(s->effort), b["effort"]);
+  if (b["model"].is<const char*>())  copyText(s->model, sizeof(s->model), b["model"]);
+  if (b["effort"].is<const char*>()) copyText(s->effort, sizeof(s->effort), b["effort"]);
   if (b["pats"].is<int>())           s->pats = (uint16_t)b["pats"].as<int>();
   if (b["helpers"].is<JsonArrayConst>()) {
     s->helperCount = 0;
@@ -198,8 +267,8 @@ bool upsertSession(JsonVariantConst b, String& err) {
       if (s->helperCount >= MAX_HELPERS) break;
       Helper& dst = s->helpers[s->helperCount++];
       copyStr(dst.id, sizeof(dst.id), h["id"] | "");
-      copyStr(dst.name, sizeof(dst.name), h["name"] | "agent");
-      copyStr(dst.label, sizeof(dst.label), h["label"] | "");
+      copyText(dst.name, sizeof(dst.name), h["name"] | "agent");
+      copyText(dst.label, sizeof(dst.label), h["label"] | "");
       dst.color = (uint8_t)((h["color"] | 0) & 7);
       dst.body = (uint8_t)((h["body"] | 0) % BODY_COUNT);
       dst.state = (h["done"] | false) ? PetState::Done : parseState(h["state"] | "working");
@@ -228,8 +297,8 @@ bool openApproval(JsonVariantConst b, String& err) {
   g_approval.isActive = true;
   copyStr(g_approval.id, sizeof(g_approval.id), id);
   copyStr(g_approval.sid, sizeof(g_approval.sid), sid);
-  copyStr(g_approval.tool, sizeof(g_approval.tool), b["tool"] | "Tool");
-  copyStr(g_approval.summary, sizeof(g_approval.summary), b["summary"] | "");
+  copyText(g_approval.tool, sizeof(g_approval.tool), b["tool"] | "Tool");
+  copyText(g_approval.summary, sizeof(g_approval.summary), b["summary"] | "");
   g_approval.startedMs = millis();
   g_approval.timeoutMs = constrain((int)(b["timeout"] | 20), 3, 600) * 1000UL;
   g_lastActivityMs = g_approval.startedMs;
